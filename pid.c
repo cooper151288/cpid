@@ -3,34 +3,32 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-float op, oi, od, oa;
-float roi, rod, rop, roa;
-float p, i, d;
-float pe, ie, de, de1, de2, de3;
-int k1, k2, k3;
-                FILE *fp;
+      float op, oi, od, oa;
+      float roi, rod, rop, roa;
+      float p, i, d;
+      float pe, ie, de, de1, de2, de3;
+      FILE *fp;
+      float dt=0.1;
+      float pbest=100;
+      float ibest=5;
+      float dbest=0.01;
 
-        float dt=0.1;
-        float pbest=100;
-        float ibest=5;
-        float dbest=0.01;
-
-      long s = 40000;
-      long oimax = 4000000;
-      long oimin = -10000;
-      long odmin = -100000;
-      long odmax = 100000;
-      long oamax = 5000000;
-      long oamin = 10;
+      long s = 40000;       //setpoint
+      long oimax = 4000000; //max integral output
+      long oimin = -10000;  //min integral output
+      long odmin = -100000; //min derivative output
+      long odmax = 100000;  //max derivative output
+      long oamax = 5000000; //max total output
+      long oamin = 10;      //min total output
 
       long temp4=40000;
       long temp3=40000;
       long temp2=40000;
       long temp1=40000;
-      long temp0=40000;
+      long temp0=40000; //historical temps
       long tmp;
    
-int intconstrain(float var, float max, float min)
+int intconstrain(float var, float max, float min) //returns an integer between min and max
         {
         if( var>=(int)max )
                 var=(int)max;
@@ -41,7 +39,7 @@ int intconstrain(float var, float max, float min)
         return var;
          }
 
-float constrain(float var, float max, float min)
+float constrain(float var, float max, float min) //returns a float between min and max
         { 
                 if( var>=max )
                         var=max;
@@ -50,54 +48,38 @@ float constrain(float var, float max, float min)
         return var;
          }
 
-float integral(float i, float s, float dt, int k1)
+float integral(float i, float s, float dt) //integral
         {
-                ie=dt * k1 * ( temp0 + temp1 - ( 2 * s ) ) / 2;
-                oi = roi + ( ie * i );
-                roi=constrain(oi, oimax, oimin);
+                ie=dt * ( temp0 + temp1 - ( 2 * s ) ) / 2; //added integral error
+                oi = roi + ( ie * i );                          //adds to previous error
+                roi=constrain(oi, oimax, oimin);                //constrain to acceptable values
         return roi;
          }
 
 
-float derivative(float d, float s, float dt, int k1, int k2, int k3)
+float derivative(float d, float dt)
         { 
 
-//              de = ( temp0 - temp1 ) / ( dt );
 
-                de = ( temp0 - temp1 ) / ( dt*k1 );
-//              de1 = ( temp0 - temp1 ) / ( dt*k1 );
-//              de2 = ( temp0 - temp2 ) / ( dt*( k1+k2 ) );
-//              de3 = ( temp0 - temp3 ) / ( dt*( k1+k2+k3 ) );
-//              de=de1+de2+de3;
+                de = ( temp0 - temp1 ) / ( dt );  //derivative error
+                od = d * de;                      //correction term
+                rod=constrain(od, odmax, odmin);  //constrain
 
-                od = d * de;
-                rod=constrain(od, odmax, odmin);
-/*
-                if(od==-rod)
-                d=d*0.1;
-                if( od==odmax || od==odmin )
-                { 
-                rod=( rod+od )/2;
-                d=d*0.1;
-                }
-                else
-                rod=od;
-*/
         return rod;
         }
 
 float proportional(float p, float s)
         { 
-                pe=temp0 - s;
-                rop = p * pe;
+                pe=temp0 - s; //prop. error
+                rop = p * pe; //scale
         return rop;
          }
 
 float pid(float p, float i, float d, float dt, float rop, float roi, float rod, float s, int k1, int k2, int k3)
         { 
-                roi=integral(i, s, dt, k1);
+                roi=integral(i, s, dt);
                 rop=proportional(p, s);
-                rod=derivative(d, s, dt, k1, k2, k3);
+                rod=derivative(d, dt);
                 oa = rop + roi + rod + oamin;
                 roa=intconstrain(( oa + 0.5 ), oamax, oamin);
         return roa;
@@ -112,12 +94,9 @@ roi=1;
   oi=0;
   dt=dt / ( roa * 100 );
 //1.12653 0.304294 -0.278493
-  k1=1;
-  k2=1;
-  k3=1;
   p=pbest;
-  i=ibest/( dt * k1 ); //should make these invariant
-  d=dbest*dt*k1;
+  i=ibest/( dt ); //should make these invariant
+  d=dbest*dt;
 while( 1==1 ) 
         {  //while loop
 
@@ -128,22 +107,18 @@ while( 1==1 )
                 usleep(( dt * 1000000));
                 dt=roa/1000000;
         if(tmp!=temp0)
-        { 
-                k3=k2;
-                k2=k1;
-                k1=1;
+        { ;
                 temp4 = temp3;
                 temp3 = temp2;
                 temp2 = temp1;
                 temp1 = temp0;
                 temp0 = tmp;
-        roa=pid(p, i, d, dt, rop, roi, rod, s, k1, k2, k3);
+        roa=pid(p, i, d, dt, rop, roi, rod, s);
         dt=roa/1000000;
          }
         else
         { 
-        k1=k1+1;
-//      roa=pid(p, i, d, dt, rop, roi, rod, s, k1, k2, k3);
+//      roa=pid(p, i, d, dt, rop, roi, rod, s);
         roi=roi + ( i * dt * ( temp0 - s )  * 0.5 );
         roa=intconstrain( ( roa + roi ), oamax, oamin);
          }
